@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>한국 정치인 관계 네트워크 (2024.12–2026.05)</title>
+<!-- 데이터 파일 (인물·관계·출처 수정은 이 파일만 편집하세요) -->
+<script src="korean_politicians_data.js"></script>
+<!-- D3.js v7 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0d1117;color:#e6edf3;font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;overflow:hidden;display:flex;flex-direction:column}
+header{text-align:center;padding:12px 20px 4px;background:linear-gradient(180deg,#161b22 0%,transparent 100%);flex-shrink:0}
+header h1{font-size:1.2rem;font-weight:700;color:#f0f6fc}
+header p{font-size:.7rem;color:#8b949e;margin-top:2px}
+.legend{display:flex;justify-content:center;gap:14px;padding:4px 20px 5px;flex-wrap:wrap;flex-shrink:0}
+.legend-item{display:flex;align-items:center;gap:4px;font-size:10px;color:#8b949e}
+.legend-dot{width:8px;height:8px;border-radius:50%}
+#graph-container{flex:1;position:relative;overflow:hidden;min-height:0}
+#network-svg{width:100%;height:100%;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none}
+#network-svg.dragging{cursor:grabbing}
+.tooltip{position:absolute;background:#21262d;border:1px solid #30363d;border-radius:8px;padding:7px 11px;font-size:11px;color:#c9d1d9;pointer-events:none;opacity:0;transition:opacity .15s;max-width:180px;z-index:50;white-space:nowrap}
+#zoom-controls{position:fixed;bottom:70px;right:16px;display:flex;flex-direction:column;gap:4px;z-index:80;align-items:center}
+.zoom-btn{width:34px;height:34px;background:#21262d;border:1px solid #30363d;border-radius:8px;color:#c9d1d9;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;font-family:inherit}
+.zoom-btn:hover{background:#2d333b;color:#f0f6fc;border-color:#58a6ff}
+#zoom-level{font-size:10px;color:#8b949e;text-align:center;padding:3px 0;min-width:34px}
+#info-panel{position:fixed;top:0;right:-490px;width:min(470px,100vw);height:100%;background:#161b22;border-left:1px solid #30363d;overflow-y:auto;transition:right .32s cubic-bezier(.4,0,.2,1);z-index:100}
+#info-panel.open{right:0}
+.panel-header{display:flex;align-items:flex-start;justify-content:space-between;padding:18px 18px 12px;border-bottom:1px solid #30363d;position:sticky;top:0;background:#161b22;z-index:10}
+.panel-type-badge{display:inline-block;font-size:10px;font-weight:600;padding:2px 7px;border-radius:20px;margin-bottom:5px}
+.badge-person{background:#1f3a5f;color:#58a6ff}.badge-relation{background:#2d1a4a;color:#bc8cff}
+.panel-title{font-size:1.1rem;font-weight:700;color:#f0f6fc;line-height:1.3}
+.panel-subtitle{font-size:.72rem;color:#8b949e;margin-top:2px}
+.close-btn{background:none;border:1px solid #30363d;color:#8b949e;width:26px;height:26px;border-radius:6px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:8px;margin-top:2px;transition:all .15s}
+.close-btn:hover{background:#21262d;color:#f0f6fc}
+.panel-body{padding:14px 16px}
+.section-title{font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:#8b949e;margin-bottom:8px;margin-top:14px}
+.section-title:first-child{margin-top:0}
+.event-card{background:#21262d;border:1px solid #30363d;border-radius:8px;padding:10px 12px;margin-bottom:7px;border-left:3px solid}
+.event-date{font-size:10px;font-weight:600;color:#8b949e;margin-bottom:2px}
+.event-title{font-size:.8rem;font-weight:600;color:#f0f6fc;margin-bottom:3px;line-height:1.4}
+.event-desc{font-size:.73rem;color:#8b949e;line-height:1.6}
+.source-list{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px}
+.source-link{display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#58a6ff;text-decoration:none;background:#1f3a5f22;border:1px solid #1f6feb55;padding:2px 6px;border-radius:4px}
+.source-link:hover{background:#1f6feb33;text-decoration:underline}
+.relation-block{background:#21262d;border:1px solid #30363d;border-radius:8px;padding:12px;margin-bottom:7px}
+.relation-block p{font-size:.75rem;color:#c9d1d9;line-height:1.7}
+.person-chips{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap}
+.person-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600;border:1.5px solid}
+.chip-dot{width:6px;height:6px;border-radius:50%}
+.tl-item{display:flex;gap:8px;margin-bottom:5px;align-items:flex-start}
+.tl-date{font-size:10px;color:#58a6ff;min-width:56px;font-weight:600;padding-top:1px}
+.tl-event{font-size:.73rem;color:#c9d1d9;line-height:1.5}
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90;display:none}
+#overlay.active{display:block}
+#info-panel::-webkit-scrollbar{width:4px}
+#info-panel::-webkit-scrollbar-track{background:#161b22}
+#info-panel::-webkit-scrollbar-thumb{background:#30363d;border-radius:2px}
+#article-btn{position:fixed;bottom:16px;left:16px;background:#238636;border:none;color:#fff;padding:9px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;display:flex;align-items:center;gap:5px;z-index:80;box-shadow:0 4px 12px rgba(0,0,0,.4);transition:all .15s}
+#article-btn:hover{background:#2ea043}
+#article-panel{position:fixed;bottom:0;left:0;width:min(400px,100vw);max-height:82vh;background:#161b22;border:1px solid #30363d;border-bottom:none;border-left:none;border-radius:0 12px 0 0;transform:translateY(100%);transition:transform .32s cubic-bezier(.4,0,.2,1);z-index:85;display:flex;flex-direction:column;overflow:hidden}
+#article-panel.open{transform:translateY(0)}
+.ap-header{padding:12px 16px 10px;border-bottom:1px solid #30363d;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.ap-title{font-size:.9rem;font-weight:700;color:#f0f6fc}
+.ap-close{background:none;border:1px solid #30363d;color:#8b949e;width:24px;height:24px;border-radius:5px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center}
+.ap-body{padding:12px 16px;overflow-y:auto;flex:1}
+.ap-tabs{display:flex;gap:2px;background:#21262d;border-radius:6px;padding:3px;margin-bottom:10px}
+.ap-tab{flex:1;padding:5px;text-align:center;font-size:11px;font-weight:600;border-radius:4px;cursor:pointer;color:#8b949e;border:none;background:none;font-family:inherit;transition:all .15s}
+.ap-tab.active{background:#30363d;color:#f0f6fc}
+.ap-input{width:100%;background:#21262d;border:1px solid #30363d;border-radius:6px;padding:8px 10px;color:#e6edf3;font-size:12px;font-family:inherit;resize:none;outline:none;transition:border-color .15s}
+.ap-input:focus{border-color:#238636}
+.ap-btn{width:100%;padding:8px;background:#238636;border:none;border-radius:6px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:8px;transition:all .15s}
+.ap-btn:hover{background:#2ea043}
+.ap-btn:disabled{background:#21262d;color:#484f58;cursor:not-allowed}
+.ap-result{margin-top:10px;display:none}
+.ap-result-title{font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#8b949e;margin-bottom:7px}
+.ap-person-item{display:flex;align-items:center;gap:8px;padding:7px 9px;background:#21262d;border-radius:6px;margin-bottom:4px;cursor:pointer;transition:background .12s}
+.ap-person-item:hover{background:#2d333b}
+.ap-person-item input[type=checkbox]{accent-color:#238636;width:13px;height:13px}
+.ap-person-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.ap-person-name{font-size:12px;font-weight:600;color:#f0f6fc;flex:1}
+.ap-person-tag{font-size:10px;color:#8b949e;background:#21262d;border:1px solid #30363d;padding:1px 5px;border-radius:4px}
+.new-tag{color:#238636;border-color:#238636}
+.ap-add-btn{width:100%;padding:8px;background:#1f6feb;border:none;border-radius:6px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:8px}
+.ap-msg{font-size:11px;padding:6px 8px;border-radius:6px;margin-top:8px;display:none}
+.ap-msg.err{background:#3d1a1a;color:#f87171;border:1px solid #7f1d1d}
+</style>
+</head>
+<body>
+<header>
+  <h1>🇰🇷 한국 정치인 관계 네트워크</h1>
+  <p>2024년 12·3 내란 ~ 2026년 05월 주요 정치 사건</p>
+</header>
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#dc2626"></div><span>내란·반란</span></div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div><span>대립·갈등</span></div>
+  <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div><span>지지·협력</span></div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div><span>복합 관계</span></div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div><span>야권 연대</span></div>
+  <div class="legend-item"><div class="legend-dot" style="background:#a855f7"></div><span>수사·법적 판단</span></div>
+</div>
+<div id="graph-container">
+  <svg id="network-svg"></svg>
+  <div class="tooltip" id="tooltip"></div>
+</div>
+<div id="zoom-controls">
+  <button class="zoom-btn" id="zoom-in" title="확대">＋</button>
+  <div id="zoom-level">65%</div>
+  <button class="zoom-btn" id="zoom-out" title="축소">－</button>
+  <button class="zoom-btn" id="zoom-fit" title="전체 보기" style="font-size:13px">⊡</button>
+</div>
+<div id="overlay"></div>
+<div id="info-panel">
+  <div class="panel-header">
+    <div id="panel-header-content"></div>
+    <button class="close-btn" id="close-btn">✕</button>
+  </div>
+  <div class="panel-body" id="panel-body"></div>
+</div>
+<button id="article-btn">📰 기사로 인물 추가</button>
+<div id="article-panel">
+  <div class="ap-header">
+    <span class="ap-title">📰 기사 기반 자동 인물 추출</span>
+    <button class="ap-close" id="ap-close">✕</button>
+  </div>
+  <div class="ap-body">
+    <div class="ap-tabs">
+      <button class="ap-tab active" data-tab="url">URL 입력</button>
+      <button class="ap-tab" data-tab="text">텍스트 붙여넣기</button>
+    </div>
+    <div id="tab-url"><input class="ap-input" id="url-input" type="text" placeholder="https://news.khan.co.kr/..." style="height:36px"></div>
+    <div id="tab-text" style="display:none"><textarea class="ap-input" id="text-input" rows="5" placeholder="기사 내용을 여기에 붙여넣으세요..."></textarea></div>
+    <button class="ap-btn" id="analyze-btn">🔍 인물 분석하기</button>
+    <div class="ap-result" id="ap-result">
+      <div class="ap-result-title">발견된 인물</div>
+      <div id="ap-person-list"></div>
+      <button class="ap-add-btn" id="ap-add-btn">선택한 인물 네트워크에 추가</button>
+    </div>
+    <div class="ap-msg" id="ap-msg"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// 0. 모바일 뷰포트 높이 수정 (iOS Safari 등)
+// ═══════════════════════════════════════════
+function setAppHeight() {
+  document.body.style.height = window.innerHeight + 'px';
+}
+setAppHeight();
+window.addEventListener('resize', setAppHeight);
+window.addEventListener('load', setAppHeight);
+
+// ═══════════════════════════════════════════
+// 1. 데이터 파일(korean_politicians_data.js)에서 로드
+// ═══════════════════════════════════════════
+if (!window.POLITICIANS_DATA) {
+  document.body.innerHTML = '<div style="color:#ef4444;padding:40px;text-align:center;font-size:1rem">' +
+    '⚠️ 데이터 파일을 불러올 수 없습니다.<br>' +
+    '<small style="color:#8b949e">korean_politicians_data.js 파일이 같은 폴더에 있는지 확인하세요.</small></div>';
+  throw new Error('POLITICIANS_DATA not loaded');
+}
+
+const NODES        = window.POLITICIANS_DATA.nodes;
+const LINKS        = window.POLITICIANS_DATA.links;
+const POLITICIAN_DB = window.POLITICIANS_DATA.politicianDB;
+
+// ═══════════════════════════════════════════
+// 2. 연결수 기반 노드 크기 계산
+// ═══════════════════════════════════════════
+function calcDegrees() {
+  const deg = {};
+  NODES.forEach(n => { deg[n.id] = 0; });
+  LINKS.forEach(l => {
+    const s = typeof l.source === 'object' ? l.source.id : l.source;
+    const t = typeof l.target === 'object' ? l.target.id : l.target;
+    if (s !== undefined && deg[s] !== undefined) deg[s]++;
+    if (t !== undefined && deg[t] !== undefined) deg[t]++;
+  });
+  const maxDeg = Math.max(...Object.values(deg), 1);
+  const SZ_MIN = 22, SZ_MAX = 58;
+  NODES.forEach(n => {
+    n._degree = deg[n.id] || 1;
+    n.size = Math.round(SZ_MIN + (SZ_MAX - SZ_MIN) * (n._degree / maxDeg));
+  });
+}
+calcDegrees();
+
+// ═══════════════════════════════════════════
+// 3. D3 초기화
+// ═══════════════════════════════════════════
+const svg  = d3.select('#network-svg');
+const cont = document.getElementById('graph-container');
+let W = cont.clientWidth, H = cont.clientHeight;
+
+NODES.forEach(n => { n.x = (n.ix || .5) * W; n.y = (n.iy || .5) * H; });
+
+const defs = svg.append('defs');
+
+function addGlow(id, blur) {
+  const f = defs.append('filter').attr('id', `glow-${id}`)
+    .attr('x','-70%').attr('y','-70%').attr('width','240%').attr('height','240%');
+  f.append('feGaussianBlur').attr('stdDeviation', blur || 6).attr('result','blur');
+  const m = f.append('feMerge');
+  m.append('feMergeNode').attr('in','blur');
+  m.append('feMergeNode').attr('in','SourceGraphic');
+}
+NODES.forEach(n => addGlow(n.id, n.size > 45 ? 10 : 6));
+
+function addGradient(i, color) {
+  const g = defs.append('linearGradient').attr('id', `lg-${i}`).attr('gradientUnits','userSpaceOnUse');
+  g.append('stop').attr('offset','0%').attr('stop-color', color).attr('stop-opacity', .9);
+  g.append('stop').attr('offset','100%').attr('stop-color', color).attr('stop-opacity', .35);
+}
+LINKS.forEach((l, i) => addGradient(i, l.color));
+
+const root = svg.append('g');
+
+let currentK = 0.65;
+const ROLE_THRESH = 0.5;
+const LINK_THRESH = 0.70;
+
+function updateLabelVisibility(k) {
+  currentK = k;
+  const rOpacity = k >= ROLE_THRESH ? Math.min(1, (k - ROLE_THRESH) * 5) : 0;
+  const lOpacity = k >= LINK_THRESH ? Math.min(1, (k - LINK_THRESH) * 7) : 0;
+  root.selectAll('.node-sublabel').style('opacity', rOpacity);
+  root.selectAll('.node-period').style('opacity', rOpacity * 0.75);
+  if (selectedNodeId && linkLabelsSel) {
+    const conn = getConnectedNodeIds(selectedNodeId);
+    linkLabelsSel.style('opacity', d => {
+      const s = typeof d.source === 'object' ? d.source.id : d.source;
+      const t = typeof d.target === 'object' ? d.target.id : d.target;
+      return (conn.has(s) && conn.has(t)) ? lOpacity : 0;
+    });
+  } else {
+    root.selectAll('.link-label').style('opacity', lOpacity);
+  }
+  document.getElementById('zoom-level').textContent = Math.round(k * 100) + '%';
+}
+
+const zoomBehavior = d3.zoom()
+  .scaleExtent([0.05, 6])
+  .on('zoom', event => {
+    root.attr('transform', event.transform);
+    updateLabelVisibility(event.transform.k);
+  });
+
+svg.call(zoomBehavior).on('dblclick.zoom', null);
+svg.on('mousedown.cursor', () => svg.classed('dragging', true));
+svg.on('mouseup.cursor mouseleave.cursor', () => svg.classed('dragging', false));
+
+function fitGraph() {
+  const xs = NODES.map(n => n.x).filter(x => x != null);
+  const ys = NODES.map(n => n.y).filter(y => y != null);
+  if (!xs.length) return;
+  const pad = 70;
+  const x0 = Math.min(...xs) - 60, x1 = Math.max(...xs) + 60;
+  const y0 = Math.min(...ys) - 60, y1 = Math.max(...ys) + 60;
+  const dx = x1 - x0 || 1, dy = y1 - y0 || 1;
+  const scale = Math.min((W - pad * 2) / dx, (H - pad * 2) / dy, 1.5);
+  const tx = W / 2 - scale * (x0 + dx / 2);
+  const ty = H / 2 - scale * (y0 + dy / 2);
+  svg.transition().duration(700).call(
+    zoomBehavior.transform,
+    d3.zoomIdentity.translate(tx, ty).scale(scale)
+  );
+}
+
+// ── 패널 로직
+const panel    = document.getElementById('info-panel');
+const overlay  = document.getElementById('overlay');
+const closeBtn = document.getElementById('close-btn');
+const panelHdr = document.getElementById('panel-header-content');
+const panelBody = document.getElementById('panel-body');
+
+function openPanel()  { panel.classList.add('open');  overlay.classList.add('active'); }
+function closePanel() { panel.classList.remove('open'); overlay.classList.remove('active'); clearHighlight(); }
+closeBtn.addEventListener('click', closePanel);
+overlay.addEventListener('click', closePanel);
+
+function showPersonPanel(node) {
+  panelHdr.innerHTML = `<span class="panel-type-badge badge-person">인물 정보</span>
+    <div class="panel-title" style="color:${node.color}">${node.name}</div>
+    <div class="panel-subtitle">${node.role} | ${node.period}</div>`;
+  let html = `<div class="section-title">📋 주요 사건 · 이력</div>`;
+  (node.events || []).forEach(e => {
+    const s = (e.sources || []).map(s =>
+      `<a class="source-link" href="${s.url}" target="_blank">🔗 ${s.label}</a>`).join('');
+    html += `<div class="event-card" style="border-left-color:${e.color}">
+      <div class="event-date">${e.date}</div>
+      <div class="event-title">${e.title}</div>
+      <div class="event-desc">${e.desc}</div>
+      <div class="source-list">${s}</div></div>`;
+  });
+  if (node._degree) {
+    html += `<div class="section-title">📊 네트워크 정보</div>
+      <div class="relation-block"><p style="font-size:.78rem;color:#c9d1d9">연결된 인물 수: <strong style="color:#58a6ff">${node._degree}명</strong></p></div>`;
+  }
+  panelBody.innerHTML = html;
+  openPanel();
+}
+
+function showRelationPanel(link) {
+  const src = NODES.find(n => n.id === (link.source.id || link.source));
+  const tgt = NODES.find(n => n.id === (link.target.id || link.target));
+  if (!src || !tgt) return;
+  const r = link.relation || {};
+  panelHdr.innerHTML = `<span class="panel-type-badge badge-relation">관계 정보</span>
+    <div class="panel-title">${src.name} ↔ ${tgt.name}</div>
+    <div class="panel-subtitle">${link.label || ''}</div>`;
+  const chips = [src, tgt].map(n =>
+    `<span class="person-chip" style="color:${n.color};border-color:${n.color}33;background:${n.color}11">
+      <span class="chip-dot" style="background:${n.color}"></span>${n.name}</span>`).join('');
+  const tl = (r.timeline || []).map(t =>
+    `<div class="tl-item"><span class="tl-date">${t.date}</span><span class="tl-event">${t.event}</span></div>`).join('');
+  const srcs = (r.sources || []).map(s =>
+    `<a class="source-link" href="${s.url}" target="_blank">🔗 ${s.label}</a>`).join('');
+  let html = `<div class="person-chips">${chips}</div>`;
+  if (r.desc) html += `<div class="section-title">🔍 관계 설명</div><div class="relation-block"><p>${r.desc}</p></div>`;
+  if (tl)    html += `<div class="section-title">📅 타임라인</div><div class="relation-block">${tl}</div>`;
+  if (srcs)  html += `<div class="section-title">📰 출처</div><div class="source-list" style="margin-top:0">${srcs}</div>`;
+  panelBody.innerHTML = html;
+  openPanel();
+}
+
+// ── 툴팁
+const tip = document.getElementById('tooltip');
+function showTip(e, html) {
+  const rect = cont.getBoundingClientRect();
+  tip.innerHTML = html;
+  tip.style.opacity = 1;
+  tip.style.left = (e.clientX - rect.left + 14) + 'px';
+  tip.style.top  = (e.clientY - rect.top  - 10) + 'px';
+}
+function hideTip() { tip.style.opacity = 0; }
+
+// ═══════════════════════════════════════════
+// 4. 하이라이트 로직 (hover 기반)
+// ═══════════════════════════════════════════
+let linkPathsSel, linkHitsSel, linkLabelsSel, nodeGroupsSel;
+let selectedNodeId = null;
+const isTouch = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+
+function getConnectedNodeIds(nodeId) {
+  const connected = new Set([nodeId]);
+  LINKS.forEach(l => {
+    const s = typeof l.source === 'object' ? l.source.id : l.source;
+    const t = typeof l.target === 'object' ? l.target.id : l.target;
+    if (s === nodeId) connected.add(t);
+    if (t === nodeId) connected.add(s);
+  });
+  return connected;
+}
+
+function applyHighlight(nodeId) {
+  selectedNodeId = nodeId;
+  const conn = getConnectedNodeIds(nodeId);
+  nodeGroupsSel.style('opacity', d => conn.has(d.id) ? 1 : 0.1);
+  linkPathsSel.attr('stroke-opacity', d => {
+    const s = typeof d.source === 'object' ? d.source.id : d.source;
+    const t = typeof d.target === 'object' ? d.target.id : d.target;
+    return (conn.has(s) && conn.has(t)) ? 0.85 : 0.04;
+  });
+  linkHitsSel.style('pointer-events', d => {
+    const s = typeof d.source === 'object' ? d.source.id : d.source;
+    const t = typeof d.target === 'object' ? d.target.id : d.target;
+    return (conn.has(s) && conn.has(t)) ? 'all' : 'none';
+  });
+  const lOpacity = currentK >= LINK_THRESH ? Math.min(1, (currentK - LINK_THRESH) * 7) : 0;
+  linkLabelsSel.style('opacity', d => {
+    const s = typeof d.source === 'object' ? d.source.id : d.source;
+    const t = typeof d.target === 'object' ? d.target.id : d.target;
+    return (conn.has(s) && conn.has(t)) ? lOpacity : 0;
+  });
+}
+
+function clearHighlight() {
+  if (!selectedNodeId) return;
+  selectedNodeId = null;
+  if (!nodeGroupsSel) return;
+  nodeGroupsSel.style('opacity', 1);
+  linkPathsSel.attr('stroke-opacity', .55);
+  linkHitsSel.style('pointer-events', 'all');
+  updateLabelVisibility(currentK);
+}
+
+// ═══════════════════════════════════════════
+// 5. 그래프 빌드
+// ═══════════════════════════════════════════
+function buildGraph() {
+  root.selectAll('*').remove();
+  defs.selectAll('linearGradient').remove();
+  LINKS.forEach((l, i) => addGradient(i, l.color));
+
+  const lg = root.append('g');
+  linkPathsSel = lg.selectAll('path.lp').data(LINKS).join('path').attr('class','lp')
+    .attr('fill','none')
+    .attr('stroke', (d, i) => `url(#lg-${i})`)
+    .attr('stroke-width', d => d.type === 'rebel' ? 2.8 : 1.8)
+    .attr('stroke-opacity', .55)
+    .attr('stroke-dasharray', d => d.dash || 'none')
+    .style('cursor','pointer')
+    .on('click', (e, d) => { e.stopPropagation(); showRelationPanel(d); })
+    .on('mouseenter', function(e, d) {
+      d3.select(this).attr('stroke-opacity', 1).attr('stroke-width', d.type === 'rebel' ? 5 : 3.5);
+      showTip(e, `<strong style="color:${d.color}">${d.label || '관계'}</strong><br><span style="color:#6e7681;font-size:10px">클릭 → 관계 상세</span>`);
+    })
+    .on('mouseleave', function(e, d) {
+      const s = typeof d.source === 'object' ? d.source.id : d.source;
+      const t = typeof d.target === 'object' ? d.target.id : d.target;
+      const isActive = selectedNodeId && (s === selectedNodeId || t === selectedNodeId);
+      d3.select(this)
+        .attr('stroke-opacity', isActive ? 0.85 : .55)
+        .attr('stroke-width', d.type === 'rebel' ? 2.8 : 1.8);
+      hideTip();
+    });
+
+  linkHitsSel = lg.selectAll('path.lh').data(LINKS).join('path').attr('class','lh')
+    .attr('fill','none').attr('stroke','transparent').attr('stroke-width', 20)
+    .style('cursor','pointer')
+    .on('click', (e, d) => { e.stopPropagation(); showRelationPanel(d); });
+
+  linkLabelsSel = root.append('g').selectAll('text').data(LINKS).join('text')
+    .attr('class','link-label')
+    .style('font-size','9.5px').style('fill','#6e7681').style('text-anchor','middle')
+    .style('pointer-events','none').style('opacity', 0)
+    .text(d => d.label || '');
+
+  nodeGroupsSel = root.append('g').selectAll('g.ng').data(NODES).join('g').attr('class','ng')
+    .style('cursor','pointer')
+    .on('click', (e, d) => { e.stopPropagation(); showPersonPanel(d); })
+    .on('mouseenter', (e, d) => {
+      if (!isTouch) applyHighlight(d.id);
+      showTip(e, `<strong style="color:${d.color}">${d.name}</strong><br>
+       <span style="color:#8b949e;font-size:10px">${d.role}</span><br>
+       <span style="color:#484f58;font-size:9.5px">연결 ${d._degree}명</span>`);
+    })
+    .on('mouseleave', () => { if (!isTouch) { clearHighlight(); hideTip(); } else { hideTip(); } })
+    .call(d3.drag()
+      .on('start', (e, d) => { if (!e.active) sim.alphaTarget(.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag',  (e, d) => { d.fx = e.x; d.fy = e.y; })
+      .on('end',   (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
+
+  nodeGroupsSel.append('circle')
+    .attr('r', d => d.size + 14).attr('fill','none')
+    .attr('stroke', d => d.color).attr('stroke-width', 1).attr('stroke-opacity', .18)
+    .attr('filter', d => `url(#glow-${d.id})`);
+
+  nodeGroupsSel.append('circle').attr('class','node-circle')
+    .attr('r', d => d.size)
+    .attr('fill', d => `${d.color}18`).attr('stroke', d => d.color)
+    .attr('stroke-width', d => d.size > 40 ? 2.5 : 1.8)
+    .on('mouseenter', function(){ d3.select(this).attr('fill', d => `${d.color}35`); })
+    .on('mouseleave', function(){ d3.select(this).attr('fill', d => `${d.color}18`); });
+
+  nodeGroupsSel.append('circle')
+    .attr('r', d => d.size - 8).attr('fill','none')
+    .attr('stroke', d => d.color).attr('stroke-width', .5).attr('stroke-opacity', .25);
+
+  nodeGroupsSel.append('text').attr('class','node-label')
+    .style('font-weight','700').style('fill','#f0f6fc').style('text-anchor','middle')
+    .style('pointer-events','none')
+    .attr('dy', d => d.size > 42 ? '-6' : d.size > 32 ? '-4' : '-3')
+    .style('font-size', d => d.size > 42 ? '12px' : d.size > 32 ? '10.5px' : '9px')
+    .text(d => d.name);
+
+  nodeGroupsSel.append('text').attr('class','node-sublabel')
+    .style('fill','#8b949e').style('text-anchor','middle').style('pointer-events','none')
+    .style('opacity', 0)
+    .attr('dy', d => d.size > 42 ? '8' : d.size > 32 ? '7' : '6')
+    .style('font-size', d => d.size > 42 ? '9px' : '8px')
+    .text(d => d.role);
+
+  nodeGroupsSel.filter(d => d.size > 30).append('text').attr('class','node-period')
+    .style('fill','#484f58').style('text-anchor','middle').style('pointer-events','none')
+    .style('opacity', 0)
+    .attr('dy', d => d.size > 42 ? '20' : '18')
+    .style('font-size','7.5px')
+    .text(d => d.period);
+
+  updateLabelVisibility(currentK);
+}
+
+buildGraph();
+
+// ═══════════════════════════════════════════
+// 6. 시뮬레이션
+// ═══════════════════════════════════════════
+const sim = d3.forceSimulation(NODES)
+  .force('link', d3.forceLink(LINKS).id(d => d.id)
+    .distance(d => d.distance || 185).strength(.45))
+  .force('charge', d3.forceManyBody().strength(-550))
+  .force('center', d3.forceCenter(W / 2, H / 2).strength(.02))
+  .force('collision', d3.forceCollide(d => (d.size || 28) + 24))
+  .force('x', d3.forceX(d => d.ix ? d.ix * W : W / 2).strength(.07))
+  .force('y', d3.forceY(d => d.iy ? d.iy * H : H / 2).strength(.07))
+  .alphaDecay(.025)
+  .velocityDecay(.42);
+
+function curvePath(d) {
+  if (!d.source || d.source.x == null) return '';
+  const sx = d.source.x, sy = d.source.y;
+  const tx = d.target.x, ty = d.target.y;
+  const mx = (sx + tx) / 2, my = (sy + ty) / 2;
+  const dx = tx - sx, dy = ty - sy;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const c = Math.min(len * .15, 48);
+  const nx = -dy / len * c, ny = dx / len * c;
+  return `M${sx} ${sy} Q${mx + nx} ${my + ny} ${tx} ${ty}`;
+}
+
+sim.on('tick', () => {
+  LINKS.forEach((d, i) => {
+    if (d.source && d.source.x != null) {
+      defs.select(`#lg-${i}`)
+        .attr('x1', d.source.x).attr('y1', d.source.y)
+        .attr('x2', d.target.x).attr('y2', d.target.y);
+    }
+  });
+  linkPathsSel.attr('d', curvePath);
+  linkHitsSel.attr('d', curvePath);
+  linkLabelsSel.attr('transform', d => {
+    if (!d.source || d.source.x == null) return '';
+    const mx = (d.source.x + d.target.x) / 2;
+    const my = (d.source.y + d.target.y) / 2;
+    const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    return `translate(${mx - dy / len * 13},${my + dx / len * 13})`;
+  });
+  nodeGroupsSel.attr('transform', d => `translate(${d.x},${d.y})`);
+});
+
+let fitted = false;
+sim.on('end', () => { if (!fitted) { fitted = true; fitGraph(); } });
+setTimeout(() => { if (!fitted) { fitted = true; fitGraph(); } }, 3500);
+
+window.addEventListener('resize', () => {
+  setAppHeight();
+  W = cont.clientWidth; H = cont.clientHeight;
+  sim.force('center', d3.forceCenter(W / 2, H / 2)).alpha(.2).restart();
+});
+
+window.addEventListener('orientationchange', () => {
+  setTimeout(() => { setAppHeight(); W = cont.clientWidth; H = cont.clientHeight; fitGraph(); }, 300);
+});
+
+svg.on('click', () => { clearHighlight(); closePanel(); });
+
+// ═══════════════════════════════════════════
+// 7. 줌 버튼
+// ═══════════════════════════════════════════
+document.getElementById('zoom-in').addEventListener('click', () =>
+  svg.transition().duration(250).call(zoomBehavior.scaleBy, 1.5));
+document.getElementById('zoom-out').addEventListener('click', () =>
+  svg.transition().duration(250).call(zoomBehavior.scaleBy, 1 / 1.5));
+document.getElementById('zoom-fit').addEventListener('click', fitGraph);
+
+// ═══════════════════════════════════════════
+// 8. 기사 분석 패널
+// ═══════════════════════════════════════════
+const articleBtn   = document.getElementById('article-btn');
+const articlePanel = document.getElementById('article-panel');
+const apClose      = document.getElementById('ap-close');
+const analyzeBtn   = document.getElementById('analyze-btn');
+const apResult     = document.getElementById('ap-result');
+const apPersonList = document.getElementById('ap-person-list');
+const apAddBtn     = document.getElementById('ap-add-btn');
+const apMsg        = document.getElementById('ap-msg');
+const urlInput     = document.getElementById('url-input');
+const textInput    = document.getElementById('text-input');
+let currentTab = 'url', foundPeople = [];
+
+articleBtn.addEventListener('click', () => articlePanel.classList.toggle('open'));
+apClose.addEventListener('click',    () => articlePanel.classList.remove('open'));
+
+document.querySelectorAll('.ap-tab').forEach(t => t.addEventListener('click', function() {
+  currentTab = this.dataset.tab;
+  document.querySelectorAll('.ap-tab').forEach(x => x.classList.remove('active'));
+  this.classList.add('active');
+  document.getElementById('tab-url').style.display  = currentTab === 'url'  ? 'block' : 'none';
+  document.getElementById('tab-text').style.display = currentTab === 'text' ? 'block' : 'none';
+}));
+
+analyzeBtn.addEventListener('click', async () => {
+  apMsg.className = 'ap-msg'; apMsg.style.display = 'none';
+  apResult.style.display = 'none';
+  analyzeBtn.disabled = true; analyzeBtn.textContent = '⏳ 분석 중...';
+  let text = '';
+  try {
+    if (currentTab === 'url') {
+      const url = urlInput.value.trim();
+      if (!url) throw new Error('URL을 입력하세요');
+      const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+      const res = await fetch(proxy, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) throw new Error('기사를 가져올 수 없습니다. 텍스트 붙여넣기를 이용해 주세요.');
+      const data = await res.json();
+      const tmp = document.createElement('div'); tmp.innerHTML = data.contents || '';
+      text = tmp.innerText || tmp.textContent || '';
+    } else {
+      text = textInput.value.trim();
+      if (!text) throw new Error('기사 텍스트를 붙여넣으세요');
+    }
+    foundPeople = POLITICIAN_DB.filter(p => text.includes(p.name));
+    if (!foundPeople.length) throw new Error('인식된 정치인이 없습니다. 더 많은 기사 내용을 붙여넣어 보세요.');
+    renderFoundPeople();
+  } catch (e) {
+    apMsg.textContent = '❌ ' + e.message;
+    apMsg.className = 'ap-msg err'; apMsg.style.display = 'block';
+  } finally {
+    analyzeBtn.disabled = false; analyzeBtn.textContent = '🔍 인물 분석하기';
+  }
+});
+
+function renderFoundPeople() {
+  apPersonList.innerHTML = '';
+  foundPeople.forEach((p, i) => {
+    const inGraph = NODES.find(n => n.id === p.id);
+    const div = document.createElement('label');
+    div.className = 'ap-person-item';
+    div.innerHTML = `<input type="checkbox" data-idx="${i}" ${inGraph ? 'checked disabled' : 'checked'}>
+      <span class="ap-person-dot" style="background:${p.color}"></span>
+      <span class="ap-person-name">${p.name}</span>
+      <span class="ap-person-tag ${inGraph ? '' : 'new-tag'}">${inGraph ? '이미 있음' : '새 인물'}</span>`;
+    apPersonList.appendChild(div);
+  });
+  apResult.style.display = 'block';
+}
+
+apAddBtn.addEventListener('click', () => {
+  const checked = [...document.querySelectorAll('#ap-person-list input:checked:not(:disabled)')]
+    .map(c => foundPeople[+c.dataset.idx]);
+  const srcUrl = currentTab === 'url' ? urlInput.value.trim() : '(텍스트 입력)';
+  const added = [];
+
+  checked.forEach(p => {
+    if (NODES.find(n => n.id === p.id)) return;
+    const posAngle = (NODES.length % 12) * (Math.PI * 2 / 12);
+    const newNode = {
+      id: p.id, name: p.name, color: p.color,
+      role: p.role || '추가된 인물', period: p.period || '기사 기반 추가',
+      group: 'added',
+      ix: 0.5 + Math.cos(posAngle) * 0.3,
+      iy: 0.5 + Math.sin(posAngle) * 0.3,
+      x: W / 2 + Math.cos(posAngle) * 200,
+      y: H / 2 + Math.sin(posAngle) * 200,
+      _degree: 1, size: 28,
+      events: (p.events || []).map(e => ({
+        ...e, sources: [...(e.sources||[]), { label:"기사 출처", url:srcUrl }]
+      }))
+    };
+    NODES.push(newNode);
+    (p.mainLinks || []).forEach(ml => {
+      if (NODES.find(n => n.id === ml.target)) {
+        LINKS.push({
+          source: newNode.id, target: ml.target,
+          type: ml.type || 'support', color: ml.color || '#6e7681',
+          label: ml.label || '관계', distance: 180,
+          relation: { desc:'기사 기반으로 추가된 연결.', sources:[{ label:"기사", url:srcUrl }] }
+        });
+      }
+    });
+    calcDegrees();
+    addGlow(newNode.id, 6);
+    added.push(p.name);
+  });
+
+  if (!added.length) {
+    apMsg.textContent = '추가할 새 인물이 없습니다.';
+    apMsg.className = 'ap-msg'; apMsg.style.display = 'block';
+    return;
+  }
+
+  buildGraph();
+  sim.nodes(NODES);
+  sim.force('link', d3.forceLink(LINKS).id(d => d.id).distance(d => d.distance || 185).strength(.45));
+  sim.alpha(.6).restart();
+
+  apMsg.textContent = `✅ ${added.join(', ')} 추가 완료!`;
+  apMsg.className = 'ap-msg'; apMsg.style.display = 'block';
+  apMsg.style.background = '#1a3d2b'; apMsg.style.color = '#4ade80'; apMsg.style.border = '1px solid #238636';
+  setTimeout(() => articlePanel.classList.remove('open'), 1500);
+});
+</script>
+</body>
+</html>
